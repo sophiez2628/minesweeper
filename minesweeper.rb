@@ -33,8 +33,9 @@ class Board
     end
   end
 
-  def [](coord)
-    x,y = coord
+  def [](pos)
+    x,y = pos
+    return board[x][y]
   end
 
 end
@@ -54,26 +55,31 @@ puts dsfasdf puts
       when 1
         #reveal
         puts "Which tile would you like to reveal? Ex) x,y"
-        coord = gets.chomp.split(",").map { |el| Integer(el)}
+        pos = gets.chomp.split(",").map { |el| Integer(el)}
+        board[pos].reveal
 
-        board[coord.first, coord.last]
 
       when 2
         puts "Which flag would you like to reveal? Ex) x,y"
-        coord = gets.chomp.split(",").map { |el| Integer(el)}
+        pos = gets.chomp.split(",").map { |el| Integer(el)}
     end
+  end
+
+  def game_over
+
   end
 
 end
 
 class Tile
-  attr_reader :board,
-  attr_accessor :position, :flag
+  attr_reader :board, :bomb
+  attr_accessor :pos, :flag, :display
   def initialize(board,bomb)
     @board = board
-    @position = nil
+    @pos = nil
     @bomb = bomb
     @flag = false
+    @display = "*"
   end
 =begin
   def inspect
@@ -83,9 +89,7 @@ class Tile
     "state?    #{revealed?}"
   end
 =end
-  def bombed?
 
-  end
   def flagged?
     @flag
   end
@@ -93,12 +97,53 @@ class Tile
   end
 
   def reveal
+    board.game_over if board[pos].bomb
+
+    if neighbors.all? { |tile| !tile.bomb }
+      #all neighbors do not contain a bomb
+      #reveal that this is an empty tile
+      self.display = " "
+      neighbors.each do |neighbor|
+        neighbor.reveal
+      end
+    else
+      #at least one of its neighbors contain a bomb
+      self.display = neighbor_bomb_count.to_s
+      #display number on tile
+    end
+
+
   end
 
+  # returns array of neighbors
   def neighbors
+    next_to = [[-1,0],[-1,1],[0,1],[1,1],
+              [1,0],[1,-1],[0,-1],[-1,-1]]
+
+   pos_neighbors = []
+   next_to.each do |move|
+     tmp = [pos[0] + move[0], pos[1] + move[1]]
+     pos_neighbors << tmp if valid_position(tmp)
+   end
+
+   pos_neighbors
   end
+
+  def valid_position?
+    row = pos[0]
+    col = pos[1]
+    return true if (0..8).include?(row) && (0..8).include?(col)
+
+    false
+  end
+
 
   def neighbor_bomb_count
+    count = 0
+    neighbors.each do |neighbor|
+      count += 1 if neighbor.bomb
+    end
+    count
   end
 
 end
