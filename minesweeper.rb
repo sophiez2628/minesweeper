@@ -1,36 +1,40 @@
 require 'byebug'
+require 'yaml'
+require 'colorize'
+
 
 class Board
   BOMB_COUNT = 10
   TILE_COUNT = 81
-  attr_reader :board
+  attr_reader :grid
 
   def initialize
-    @board = Array.new(9) {Array.new(9)}
+    @grid = Array.new(9) {Array.new(9)}
   end
 
   def populate
     # make 10 bombs
-
     tiles = Array.new(BOMB_COUNT) { Tile.new(self, true)}
-    # Add tiles for the rest of the board
+    # Add tiles for the rest of the grid
     (TILE_COUNT - BOMB_COUNT).times { tiles << Tile.new(self, false)}
     # 81 shuffled tiles
     tiles.shuffle!
-    #fill board
-    board.each_with_index do |row, row_idx|
+
+    #fill grid
+    grid.each_with_index do |row, row_idx|
       row.each_with_index do |el, el_idx|
         temp_tile = tiles.shift
         temp_tile.pos = [row_idx, el_idx]
-        board[row_idx][el_idx] = temp_tile
+        grid[row_idx][el_idx] = temp_tile
       end
     end
+
   end
 
   def print_board
-    puts "    0   1   2   3   4   5   6   7   8"
-    board.each_with_index do |row, row_idx|
-      print "#{row_idx} | "
+    puts "    0   1   2   3   4   5   6   7   8".colorize(:magenta)
+    grid.each_with_index do |row, row_idx|
+      print "#{row_idx} | ".colorize(:magenta)
       row.each do |tile|
         print tile.inspect + " | "
       end
@@ -38,26 +42,25 @@ class Board
     end
   end
 
-  # def [](row,col) # self[x, y]
-  def [](pos)     # self[[x, y]] or self[pos]
-    # x = pos[0]
-    # y = pos[1]
+
+  def [](pos)
     x, y = pos
-    board[x][y]
+    grid[x][y]
   end
 
-  def game_over
-    board.each do |row|
+  def game_loss
+    grid.each do |row|
       row.each do |tile|
-        tile.display = "B" if tile.bomb
+        tile.display = "B".colorize(:yellow) if tile.bomb
       end
     end
-    print_board
+    print_grid
     abort("Game over! You lose!")
   end
 
-  def done?
-    board.flatten.select { |tile| !tile.revealed?}.all? { |tile| tile.bomb}
+  def won?
+    #get all tiles, get all non-revealed, check if they are all bombs
+    grid.flatten.select { |tile| !tile.revealed?}.all? { |tile| tile.bomb}
   end
 
 end
@@ -72,7 +75,7 @@ class Minesweeper
   end
 
   def play
-    until board.done?
+    until board.won?
       board.print_board
       turn
     end
@@ -82,26 +85,33 @@ class Minesweeper
   def turn
     user_choice = 0
     until user_choice == 1 || user_choice == 2
-      puts "Do you want to reveal(1) or flag a tile(2)?"
+      puts "Do you want to reveal(1) or flag a tile(2) or save current game(3)?"
       user_choice = gets.chomp.to_i
       case user_choice
         when 1
-          #reveal
+          # reveal
           puts "Which tile would you like to reveal? Ex) x,y"
           pos = gets.chomp.split(",").map { |el| Integer(el)}
           board[pos].reveal
-
-
         when 2
+          #set flag
           puts "Which flag would you like to reveal? Ex) x,y"
           pos = gets.chomp.split(",").map { |el| Integer(el)}
           board[pos].set_flag
+        when 3
+          save
       end
     end
   end
 
+  def save
+    File.open("current_game.txt", "w") do |file|
+      file.puts self.to_yaml
+    end
 
+    abort("Game saved to current_game.txt")
 
+  end
 end
 
 class Tile
@@ -112,7 +122,7 @@ class Tile
     @pos = nil
     @bomb = bomb
     @flag = false
-    @display = "*"
+    @display = "*".colorize(:blue)
     @revealed = false
   end
 
@@ -123,10 +133,10 @@ class Tile
   def set_flag
     if board[pos].flagged?
       self.flag = false
-      self.display = "*"
+      self.display = "*".colorize(:blue)
     else
       self.flag = true
-      self.display = "F"
+      self.display = "F".colorize(:red)
     end
   end
 
@@ -138,24 +148,21 @@ class Tile
   end
 
   def reveal
-    #p board.class
-    #p board[pos]
-    #puts "call reveal"
-    board.game_over if board[pos].bomb
+    board.game_loss if board[pos].bomb
 
     if neighbors.all? { |position| !board[position].bomb }
       #all neighbors do not contain a bomb
-      #reveal that this is an empty tile
+      #show that this is an empty tile
       self.display = "_"
       self.revealed = true
       neighbors.each do |position|
         board[position].reveal
       end
     else
-      self.revealed = true
       #at least one of its neighbors contain a bomb
-      self.display = neighbor_bomb_count.to_s
       #display number on tile
+      self.revealed = true
+      self.display = neighbor_bomb_count.to_s
     end
 
 
@@ -169,7 +176,8 @@ class Tile
    pos_neighbors = []
    next_to.each do |move|
      tmp = [pos[0] + move[0], pos[1] + move[1]]
-     pos_neighbors << tmp if valid_position?(tmp) && !board[tmp].revealed?
+     #grabbing possible neighbors if on board, unrevealed, and not flagged
+     pos_neighbors << tmp if valid_position?(tmp) && !board[tmp].revealed? && !board[tmp].flagged?
    end
 
    pos_neighbors
@@ -192,4 +200,13 @@ class Tile
     count
   end
 
+end
+
+if __FILE__ == $PROGRAM_NAME
+  if ARGV[0]
+    YAML.load_file(ARGV.shift).play
+  else
+    game = Minesweeper.new
+    game.play
+  end
 end
